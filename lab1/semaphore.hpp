@@ -11,13 +11,17 @@
 class Semaphore
 {
 public:
-    Semaphore(const Semaphore &) = delete;
     Semaphore &operator=(const Semaphore &) = delete;
     ~Semaphore() = default;
 
     Semaphore(int init_count, int max_count) : cnt(init_count), max(max_count)
     {
         assert(init_count <= max_count && init_count >= 0 && max_count >= 0);
+    }
+
+    Semaphore(const Semaphore &sem) : cnt(sem.cnt), max(sem.max)
+    {
+        assert(cnt <= max && cnt >= 0 && max >= 0);
     }
 
     void Down()

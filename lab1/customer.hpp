@@ -1,20 +1,27 @@
 #include "semaphore.hpp"
 
+#ifndef CUSTOMER_HPP
+#define CUSTOMER_HPP
+
 class Customer
 {
 public:
-    Customer(const Customer &) = delete;
     Customer &operator=(const Customer &) = delete;
     ~Customer() = default;
 
-    Customer(int index, int start_time, int service_time): index(index), start_time(start_time), service_time(service_time), sem(0, 0)
+    Customer(int index, int start_time, int service_time): index(index), start_time(start_time), service_time(service_time), sem(0, 1)
+    {
+        
+    }
+
+    Customer(const Customer &customer): index(customer.index), start_time(customer.start_time), service_time(customer.service_time), sem(customer.sem)
     {
         
     }
 
     void print_info()
     {
-        std::cout << "Customer " << index << " start at " << start_time << " and service at " << service_time << std::endl;
+        std::cout << "Customer " << index << " start at " << start_time << ", service time " << service_time << std::endl;
     }
 
     void up()
@@ -49,3 +56,5 @@ private:
     int service_time;
     Semaphore sem;
 };
+
+#endif // CUSTOMER_HPP

@@ -1,14 +1,25 @@
 #include <vector>
 #include "semaphore.hpp"
 
+#ifndef SERVER_HPP
+#define SERVER_HPP
+
 class Server
 {
-    Server(const Server &) = delete;
-    Server &operator=(const Server &) = delete;
 public:
     Server(int index): index(index)
     {
 
+    }
+
+    Server(const Server &): index(index)
+    {
+
+    }
+
+    ~Server()
+    {
+        std::cout << "Server " << index << " destructed" << std::endl;
     }
 
     void set_served_customer_index(int served_customer_index)
@@ -30,3 +41,5 @@ private:
     int index;
     std::vector<int> served_customer_index;
 };
+
+#endif // SERVER_HPP

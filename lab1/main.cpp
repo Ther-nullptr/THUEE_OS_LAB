@@ -3,24 +3,22 @@
 #include <fstream>
 #include <algorithm>
 
+#include "engine.hpp"
+
 int main(int argc, char **argv)
 {
-    int n_tellers = 3;
+    int n_servers = 3;
     std::string test_file_name = "test.txt";
 
-    if (argc > 2)
+    if (argc > 1)
     {   
-        // teller numbers
-        n_tellers = std::stoi(argv[1]);
-        std::cout << "Number of tellers: " << n_tellers << std::endl;
-
-        // test file names
-        std::string test_file_name = argv[2];
-        std::cout << "Test file name: " << test_file_name << std::endl;
+        // server numbers
+        n_servers = std::stoi(argv[1]);
+        std::cout << "Number of servers: " << n_servers << std::endl;
     }
     else
     {
-        std::cout << "use default settings" << "n_tellers = 3, test_file_name = test.txt" << std::endl;
+        std::cout << "use default settings" << "n_servers = 3" << std::endl;
     }
 
     // open the file to read the data
@@ -42,5 +40,22 @@ int main(int argc, char **argv)
     {
         std::cout << "start_time is not sorted!" << std::endl;
         return 0;
+    }    
+
+    // construct the customers
+    std::vector<Customer> customers;
+    for (int i = 0; i < start_time.size(); ++i)
+    {
+        customers.push_back(Customer(i, start_time[i], service_time[i]));
     }
+
+    // print the info
+    for (int i = 0; i < customers.size(); ++i)
+    {
+        customers[i].print_info();
+    }
+
+    // construct the engine
+    Engine engine(n_servers, customers);
+    engine.execute();
 }
