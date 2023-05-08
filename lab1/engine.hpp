@@ -18,7 +18,7 @@ class Engine
     Engine &operator=(const Engine &) = delete;
 
 public:
-    Engine(int server_num, std::vector<Customer> customers): server_num(server_num), customers(customers), served_customer_num(0), begin_serve_sem(0, 3)
+    Engine(int server_num, std::vector<Customer> customers): server_num(server_num), customers(customers), served_customer_num(0), begin_serve_sem(0, customers.size())
     {
         // initialize the servers
         for (int i = 0; i < server_num; ++i)
@@ -27,26 +27,42 @@ public:
         }
     }
 
+    ~Engine()
+    {
+        // std::cout << "Engine is destructing" << std::endl;
+        print_thread_safely({"Engine is destructing"});
+    }
+
     void execute()
     {
         // begin all the server threads
+        server_threads.reserve(server_num);
         for (int i = 0; i < server_num; ++i)
         {
-            std::thread t(&Engine::run_server, this, std::ref(i));
-            server_threads.push_back(std::move(t));
+            server_threads.emplace_back(&Engine::run_server, this, std::ref(i));
             print_thread_safely({"Server ", std::to_string(i), " is ready"});
-            server_threads[i].detach();
             // std::cout << "Server " << i << " is ready" << std::endl;   
         }
 
         // begin all the customer threads
+        customer_threads.reserve(customers.size());
         for (int i = 0; i < customers.size(); ++i)
         {
-            std::thread t(&Engine::run_customer, this, std::ref(customers[i]));
-            customer_threads.push_back(std::move(t));
+            customer_threads.emplace_back(&Engine::run_customer, this, std::ref(customers[i]));
             print_thread_safely({"Customer ", std::to_string(i), " is ready"});
-            customer_threads[i].detach();
+            
             // std::cout << "Customer " << i << " is ready" << std::endl;
+        }
+        for (int i = 0; i < customers.size(); ++i)
+        {
+            customer_threads[i].join();
+        }
+        for (int i = 0; i < server_num; ++i)
+        {
+            if (server_threads[i].joinable())
+            {
+                server_threads[i].join();
+            }
         }
     }
 
@@ -85,12 +101,6 @@ public:
     {
         while (true)
         {
-            if (detect_stopable())
-            {
-                begin_serve_sem.Up();
-                break;
-            }
-
             // wait for the queue to be not empty
             begin_serve_sem.Down();
 
@@ -120,8 +130,8 @@ public:
     {
         std::unique_lock<std::mutex> lock(detect_mtx);
 #ifdef DEBUG
-        print_thread_safely({"served_customer_num: ", std::to_string(served_customer_num)});
-        print_thread_safely({"customers.size(): ", std::to_string(customers.size())});
+        // print_thread_safely({"served_customer_num: ", std::to_string(served_customer_num)});
+        // print_thread_safely({"customers.size(): ", std::to_string(customers.size())});
 #endif
         return (served_customer_num == customers.size());
     }

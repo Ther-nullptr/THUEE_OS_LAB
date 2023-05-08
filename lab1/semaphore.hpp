@@ -12,7 +12,13 @@ class Semaphore
 {
 public:
     Semaphore &operator=(const Semaphore &) = delete;
-    ~Semaphore() = default;
+
+    ~Semaphore()
+    {
+        std::unique_lock<std::mutex> lg{mtx};
+        cnt = 0;
+        cv.notify_all();
+    }
 
     Semaphore(int init_count, int max_count) : cnt(init_count), max(max_count)
     {

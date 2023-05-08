@@ -34,13 +34,13 @@ int main(int argc, char **argv)
         service_time.push_back(c);
     }
 
-    // check the data 
-    bool sorted = std::is_sorted(start_time.begin(), start_time.end());
-    if (!sorted)
-    {
-        std::cout << "start_time is not sorted!" << std::endl;
-        return 0;
-    }    
+    // // check the data 
+    // bool sorted = std::is_sorted(start_time.begin(), start_time.end());
+    // if (!sorted)
+    // {
+    //     std::cout << "start_time is not sorted!" << std::endl;
+    //     return 0;
+    // }    
 
     // construct the customers
     std::vector<Customer> customers;
