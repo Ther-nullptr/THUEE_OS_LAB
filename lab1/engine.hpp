@@ -29,7 +29,6 @@ public:
 
     ~Engine()
     {
-        // std::cout << "Engine is destructing" << std::endl;
         print_thread_safely({"Engine is destructing"});
     }
 
@@ -39,9 +38,8 @@ public:
         server_threads.reserve(server_num);
         for (int i = 0; i < server_num; ++i)
         {
-            server_threads.emplace_back(&Engine::run_server, this, std::ref(i));
-            print_thread_safely({"Server ", std::to_string(i), " is ready"});
-            // std::cout << "Server " << i << " is ready" << std::endl;   
+            server_threads.emplace_back(&Engine::run_server, this, i);
+            print_thread_safely({"Server ", std::to_string(i), " is ready"}); 
         }
 
         // begin all the customer threads
@@ -50,13 +48,15 @@ public:
         {
             customer_threads.emplace_back(&Engine::run_customer, this, std::ref(customers[i]));
             print_thread_safely({"Customer ", std::to_string(i), " is ready"});
-            
-            // std::cout << "Customer " << i << " is ready" << std::endl;
         }
         for (int i = 0; i < customers.size(); ++i)
         {
             customer_threads[i].join();
         }
+
+        std::cout << "All customers have been served" << std::endl;
+        begin_serve_sem.WakeUpAll();
+
         for (int i = 0; i < server_num; ++i)
         {
             if (server_threads[i].joinable())
@@ -66,6 +66,7 @@ public:
         }
     }
 
+private:
     void run_customer(Customer& customer)
     {
         int wait_time = customer.get_start_time();
@@ -104,6 +105,11 @@ public:
             // wait for the queue to be not empty
             begin_serve_sem.Down();
 
+            if (detect_stopable())
+            {
+                break;
+            }
+
             // dequeue
             Customer* customer_ptr = nullptr;
             {
@@ -129,10 +135,6 @@ public:
     bool detect_stopable()
     {
         std::unique_lock<std::mutex> lock(detect_mtx);
-#ifdef DEBUG
-        // print_thread_safely({"served_customer_num: ", std::to_string(served_customer_num)});
-        // print_thread_safely({"customers.size(): ", std::to_string(customers.size())});
-#endif
         return (served_customer_num == customers.size());
     }
 
@@ -140,9 +142,9 @@ public:
     {
         std::unique_lock<std::mutex> lock(print_mtx);
         std::string str;
-        for (auto beg = str_list.begin(); beg != str_list.end(); ++beg)
+        for (auto it = str_list.begin(); it != str_list.end(); ++it)
         {
-            str += *beg;
+            str += *it;
         }
         std::cout << str << std::endl;
     }

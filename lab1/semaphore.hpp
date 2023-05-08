@@ -13,12 +13,7 @@ class Semaphore
 public:
     Semaphore &operator=(const Semaphore &) = delete;
 
-    ~Semaphore()
-    {
-        std::unique_lock<std::mutex> lg{mtx};
-        cnt = 0;
-        cv.notify_all();
-    }
+    ~Semaphore() = default;
 
     Semaphore(int init_count, int max_count) : cnt(init_count), max(max_count)
     {
@@ -49,6 +44,13 @@ public:
         }
         ++cnt;
         cv.notify_one(); // notify the first thread waiting on the condition variable to get the lock
+    }
+
+    void WakeUpAll()
+    {
+        std::unique_lock<std::mutex> lg{mtx};
+        cnt = max;
+        cv.notify_all();
     }
 
 private:

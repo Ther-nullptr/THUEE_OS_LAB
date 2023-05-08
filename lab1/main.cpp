@@ -7,7 +7,7 @@
 
 int main(int argc, char **argv)
 {
-    int n_servers = 3;
+    int n_servers = 5;
     std::string test_file_name = "test.txt";
 
     if (argc > 1)
