@@ -7,6 +7,7 @@
 #include <sstream>
 #include <iomanip>
 #include <cmath>
+#include <algorithm>
 #include "customer.hpp"
 #include "semaphore.hpp"
 
@@ -19,13 +20,15 @@
 #define LEAVE_BANK 2
 #define SERVE_ID 3
 
+#define max(a, b) ((a) > (b) ? (a) : (b))
+
 class Engine
 {
     Engine(const Engine &) = delete;
     Engine &operator=(const Engine &) = delete;
 
 public:
-    Engine(int server_num, std::vector<Customer> customers): server_num(server_num), customers(customers), served_customer_num(0), begin_serve_sem(0, customers.size()), time_slice(time_slice = 100) {}
+    Engine(int server_num, std::vector<Customer> customers): server_num(server_num), customers(customers), served_customer_num(0), begin_serve_sem(0, max(customers.size(), server_num)), time_slice(time_slice = 100) {}
 
     ~Engine()
     {
