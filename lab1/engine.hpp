@@ -4,13 +4,16 @@
 #include <memory>
 #include <atomic>
 #include <initializer_list>
+#include <sstream>
+#include <iomanip>
+#include <cmath>
 #include "customer.hpp"
 #include "semaphore.hpp"
 
-#define DEBUG
-
 #ifndef ENGINE_HPP
 #define ENGINE_HPP
+
+#define DEBUG
 
 class Engine
 {
@@ -18,14 +21,7 @@ class Engine
     Engine &operator=(const Engine &) = delete;
 
 public:
-    Engine(int server_num, std::vector<Customer> customers): server_num(server_num), customers(customers), served_customer_num(0), begin_serve_sem(0, customers.size())
-    {
-        // initialize the servers
-        for (int i = 0; i < server_num; ++i)
-        {
-            served_customer_index.push_back(std::vector<int>());
-        }
-    }
+    Engine(int server_num, std::vector<Customer> customers): server_num(server_num), customers(customers), served_customer_num(0), begin_serve_sem(0, customers.size()), time_slice(time_slice = 100) {}
 
     ~Engine()
     {
@@ -34,6 +30,13 @@ public:
 
     void execute()
     {
+        start_time = get_time_stamp_milliseconds();
+
+        for (int i = 0; i < server_num; ++i)
+        {
+            served_customer_index.push_back(std::vector<int>());
+        }
+
         // begin all the server threads
         server_threads.reserve(server_num);
         for (int i = 0; i < server_num; ++i)
@@ -54,7 +57,7 @@ public:
             customer_threads[i].join();
         }
 
-        std::cout << "All customers have been served" << std::endl;
+        print_thread_safely({"All customers have been served"});
         begin_serve_sem.WakeUpAll();
 
         for (int i = 0; i < server_num; ++i)
@@ -70,32 +73,23 @@ private:
     void run_customer(Customer& customer)
     {
         int wait_time = customer.get_start_time();
-#ifdef DEBUG
-        // std::cout << "Customer " << customer.get_index() << " is waiting for " << wait_time * 0.1 << " seconds" << std::endl;
-        print_thread_safely({"Customer ", std::to_string(customer.get_index()), " is waiting for ", std::to_string(wait_time * 0.1), " seconds"});
-#endif
+        print_thread_safely({"Customer ", std::to_string(customer.get_index()), " will come after ", std::to_string(wait_time), " time slides"});
         // wait some time, using std::chrono
-        std::this_thread::sleep_for(std::chrono::milliseconds(wait_time * 100));
+        std::this_thread::sleep_for(std::chrono::milliseconds(wait_time * time_slice));
 
         // get the number (which means enqueue)
         {
             std::unique_lock<std::mutex> lock(enqueue_mtx);
             customer_queue.emplace(&customer);
             begin_serve_sem.Up();
-#ifdef DEBUG
-            // std::cout << "Customer " << customer.get_index() << " is entering the bank" << std::endl;
             print_thread_safely({"Customer ", std::to_string(customer.get_index()), " is entering the bank"});
-#endif
         }
 
         // wait the service
         customer.down();
 
         // leave the bank
-#ifdef DEBUG
-        // std::cout << "Customer " << customer.get_index() << " is leaving the bank" << std::endl;
         print_thread_safely({"Customer ", std::to_string(customer.get_index()), " is leaving the bank"});
-#endif
     };
 
     void run_server(int server_id)
@@ -107,6 +101,7 @@ private:
 
             if (detect_stopable())
             {
+                print_thread_safely({"Server ", std::to_string(server_id), " is stopping"});
                 break;
             }
 
@@ -116,15 +111,11 @@ private:
                 std::unique_lock<std::mutex> lock(dequeue_mtx);
                 customer_ptr = customer_queue.front();
                 customer_queue.pop();
-                // served_customer_index[server_id].push_back(customer_ptr->get_index());
-#ifdef DEBUG
-                // std::cout << "Server " << server.get_index() << " is serving customer " << customer_ptr->get_index() << std::endl;
                 print_thread_safely({"Server ", std::to_string(server_id), " is serving customer ", std::to_string(customer_ptr->get_index())});
-#endif
             }
 
             // service
-            std::this_thread::sleep_for(std::chrono::milliseconds(customer_ptr->get_service_time() * 100));
+            std::this_thread::sleep_for(std::chrono::milliseconds(customer_ptr->get_service_time() * time_slice));
 
             // finish customer thread
             customer_ptr->up();
@@ -141,7 +132,14 @@ private:
     void print_thread_safely(std::initializer_list<std::string> str_list)
     {
         std::unique_lock<std::mutex> lock(print_mtx);
-        std::string str;
+        // get the time hh:ss:ms
+        auto now = std::chrono::system_clock::now();
+        auto now_c = std::chrono::system_clock::to_time_t(now);
+        auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
+        std::stringstream ss;
+        ss << std::put_time(std::localtime(&now_c), "%T") << '.' << std::setfill('0') << std::setw(3) << ms.count();
+        std::string str = "[" + ss.str() + "] " + "(time step:" + std::to_string(get_time_slice()) + ") " ;
+        
         for (auto it = str_list.begin(); it != str_list.end(); ++it)
         {
             str += *it;
@@ -149,8 +147,25 @@ private:
         std::cout << str << std::endl;
     }
 
+    int64_t get_time_stamp_milliseconds()
+    {
+        auto now = std::chrono::system_clock::now();
+        auto now_c = std::chrono::system_clock::to_time_t(now);
+        auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch());
+        return ms.count();
+    }
+
+    int get_time_slice()
+    {
+        int64_t now_time = get_time_stamp_milliseconds();
+        int64_t time_diff = now_time - start_time;
+        return std::round((float)time_diff / time_slice);
+    }
+
 private:
     int server_num;
+    int time_slice;
+    int64_t start_time;
     std::atomic<int> served_customer_num;
     std::vector<Customer> customers;
     std::vector<std::thread> server_threads;
