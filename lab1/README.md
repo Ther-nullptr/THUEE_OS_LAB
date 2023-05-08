@@ -8,7 +8,7 @@
 
 ## 2 实验平台
 
-本实验在x86_64平台的Ubuntu 20.04 LTS操作系统上进行，编程语言采用C++11 和Python 3.8.10，构建工具采用GNU Make 4.2.1。
+本实验在x86_64平台的Ubuntu 20.04 LTS操作系统上进行，编程语言采用C++11，构建工具采用GNU Make 4.2.1。
 
 ## 3 实验原理
 
@@ -18,7 +18,7 @@
 
 ### 3.2 算法思路
 
-柜员（teller）和顾客（customer）的行为可以抽象为一个状态机。假设柜员有`n`个，则柜员和顾客的行为逻辑应该描述为：
+柜员（server）和顾客（customer）的行为可以抽象为一个状态机。假设柜员有`n`个，则柜员和顾客的行为逻辑应该描述为：
 
 1. 1位柜员每次只能为1位顾客服务，需要使用mutex；
 2. 柜员需要知道当前有多少位顾客在等待，需要使用semaphore；
@@ -64,6 +64,13 @@ public:
         cv.notify_one(); // notify the first thread waiting on the condition variable to get the lock
     }
 
+    void WakeUpAll()
+    {
+        std::unique_lock<std::mutex> lg{mtx};
+        cnt = max;
+        cv.notify_all();
+    }
+
 private:
     int cnt;
     int max;
@@ -72,53 +79,190 @@ private:
 };
 ```
 
-构造函数定义了信号量的初始资源和最大资源，`Down()`和`Up()`分别对应P操作和V操作。当执行`Down()`时，如果信号量的资源数为0，则阻塞线程，直到资源数大于0；当执行`Up()`时，将资源数加1，并唤醒一个等待线程。
+构造函数定义了信号量的初始资源和最大资源，`Down()`和`Up()`分别对应P操作和V操作。当执行`Down()`时，如果信号量的资源数为0，则阻塞线程，直到资源数大于0；当执行`Up()`时，将资源数加1，并唤醒一个等待线程。`WakeUpAll()`方法用于唤醒所有等待线程，通常用于程序结束时。
 
-
-### 4.2 engine
-
-`Engine`类用于模拟柜员和顾客的行为。`Engine`类的构造函数接受柜员数量`n`，并创建`n`个柜员线程。`engine`类提供了`AddCustomer()`方法，用于添加顾客。`engine`类的`Run()`方法用于启动柜员线程，`Wait()`方法用于等待柜员线程结束。
+### 4.2 customer
 
 ```cpp
-class Engine
+class Customer
 {
-    Engine(const Engine &) = delete;
-    Engine &operator=(const Engine &) = delete;
-
 public:
-    Engine(int n) : tellers(n)
+    Customer &operator=(const Customer &) = delete;
+    ~Customer() = default;
+
+    Customer(int index, int start_time, int service_time): index(index), start_time(start_time), service_time(service_time), sem(0, 1)
     {
-        for (int i = 0; i < n; ++i)
-        {
-            tellers[i] = std::thread{&Engine::Teller, this, i};
-        }
+        
     }
 
-    void AddCustomer()
+    Customer(const Customer &customer): index(customer.index), start_time(customer.start_time), service_time(customer.service_time), sem(customer.sem)
     {
-        std::unique_lock<std::mutex> lg{mtx};
-        ++waiting;
-        cv.notify_one();
+        
     }
 
-    void Run()
+    void print_info()
     {
-        for (auto &t : tellers)
-        {
-            t.join();
-        }
+        std::cout << "Customer " << index << " start at " << start_time << ", service time " << service_time << std::endl;
     }
 
-    void Wait()
+    void up()
     {
-        std::unique_lock<std::mutex> lg{mtx};
-        while (waiting > 0)
-        {
-            cv.wait(lg);
-        }
+        sem.Up();  
+    };
+
+    void down()
+    {
+        sem.Down();
+    };
+
+    // get functions, not changeable
+    const int get_index() const noexcept
+    {
+        return index;
     }
+
+    const int get_start_time() const noexcept
+    {
+        return start_time;
+    }
+
+    const int get_service_time() const noexcept
+    {
+        return service_time;
+    }
+
+private:
+    int index;
+    int start_time;
+    int service_time;
+    Semaphore sem;
 };
 ```
+
+customer类内置`start_time`，`serivce_time`等多个属性，同时内置一个信号量`sem`，用于同步。`up()`和`down()`分别对应P操作和V操作。
+
+### 4.3 engine
+
+engine类中内置模拟逻辑。首先定义每一个customer线程的逻辑：
+
+```cpp
+void run_customer(Customer& customer)
+{
+    int wait_time = customer.get_start_time();
+
+    // wait some time, using std::chrono
+    std::this_thread::sleep_for(std::chrono::milliseconds(wait_time * 100));
+
+    // get the number (which means enqueue)
+    {
+        std::unique_lock<std::mutex> lock(enqueue_mtx);
+        customer_queue.emplace(&customer);
+        begin_serve_sem.Up();
+    }
+
+    // wait the service
+    customer.down();
+};
+```
+
+customer线程首先等待一段时间，模拟到达银行的时刻。随后在取号过程中，customer进入队列，等待柜员叫号。当柜员叫号时，customer线程被唤醒，开始服务。
+
+之后是server线程的逻辑：
+
+```cpp
+void run_server(int server_id)
+{
+    while (true)
+    {
+        // wait for the queue to be not empty
+        begin_serve_sem.Down();
+
+        if (detect_stopable())
+        {
+            break;
+        }
+
+        // dequeue
+        Customer* customer_ptr = nullptr;
+        {
+            std::unique_lock<std::mutex> lock(dequeue_mtx);
+            customer_ptr = customer_queue.front();
+            customer_queue.pop();
+        }
+
+        // service
+        std::this_thread::sleep_for(std::chrono::milliseconds(customer_ptr->get_service_time() * 100));
+
+        // finish customer thread
+        customer_ptr->up();
+        served_customer_num++;
+    }
+};
+
+bool detect_stopable()
+{
+    std::unique_lock<std::mutex> lock(detect_mtx);
+    return (served_customer_num == customers.size());
+}
+```
+
+每当有顾客到来时，柜员线程被唤醒，从队列中取出顾客，开始服务。线程会睡眠一段时间，模拟服务过程。当服务结束时，顾客线程被唤醒，使得顾客线程结束。
+
+最后是总的执行逻辑：
+
+```cpp
+    void execute()
+    {
+        // begin all the server threads
+        server_threads.reserve(server_num);
+        for (int i = 0; i < server_num; ++i)
+        {
+            server_threads.emplace_back(&Engine::run_server, this, i);
+            print_thread_safely({"Server ", std::to_string(i), " is ready"}); 
+        }
+
+        // begin all the customer threads
+        customer_threads.reserve(customers.size());
+        for (int i = 0; i < customers.size(); ++i)
+        {
+            customer_threads.emplace_back(&Engine::run_customer, this, std::ref(customers[i]));
+            print_thread_safely({"Customer ", std::to_string(i), " is ready"});
+        }
+        for (int i = 0; i < customers.size(); ++i)
+        {
+            customer_threads[i].join();
+        }
+
+        std::cout << "All customers have been served" << std::endl;
+        begin_serve_sem.WakeUpAll();
+
+        for (int i = 0; i < server_num; ++i)
+        {
+            if (server_threads[i].joinable())
+            {
+                server_threads[i].join();
+            }
+        }
+    }
+```
+
+首先启动所有的柜员线程和顾客线程，随后等待所有顾客线程结束。当所有顾客线程结束后，由于此时服务队列为空，所以柜员线程会被阻塞在`begin_serve_sem.Down()`处，此时调用`begin_serve_sem.WakeUpAll()`可以唤醒所有柜员线程，之后等待所有柜员线程结束。由于此时满足`served_customer_num == customers.size()`，所以所有柜员线程会跳出循环。
+
+当然，以上方法只是一个权宜之计，实际上顾客的数量是无法预知的，这样做只是为了方便快速退出程序。
+
+另外一个需要注意的点是，当唤醒全部线程后，必须要等待所有server线程结束。否则，由于server线程与主线程是分离的，主线程结束之后会调用engine类的析构函数，此时engine类中的信号量会被销毁，而server线程还在使用信号量，会导致程序崩溃。
+
+```bash
+Engine is destructing
+terminate called without an active exception
+[1]    26166 abort      ./main 7
+```
+
+### 4.4 可视化
+
+为了更直观地显示服务情况，我们需要对一些服务信息进行记录。
+
+首先是记录时间的问题。我们以程序开始的时刻为0时刻，每一个时间片的长度为100ms（亦即，假设一个顾客等待的时间为2，那么它实际等待的时间为200ms），这样可以方便地计算出每一个顾客的到达时间和服务时间。
 
 https://www.zhihu.com/question/564376546
 
