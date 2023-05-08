@@ -18,7 +18,7 @@ int main(int argc, char **argv)
     }
     else
     {
-        std::cout << "use default settings" << "n_servers = 3" << std::endl;
+        std::cout << "use default settings" << "n_servers = " << n_servers << std::endl;
     }
 
     // open the file to read the data
@@ -32,15 +32,7 @@ int main(int argc, char **argv)
     {
         start_time.push_back(b);
         service_time.push_back(c);
-    }
-
-    // // check the data 
-    // bool sorted = std::is_sorted(start_time.begin(), start_time.end());
-    // if (!sorted)
-    // {
-    //     std::cout << "start_time is not sorted!" << std::endl;
-    //     return 0;
-    // }    
+    } 
 
     // construct the customers
     std::vector<Customer> customers;

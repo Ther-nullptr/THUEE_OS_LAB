@@ -14,6 +14,10 @@
 #define ENGINE_HPP
 
 #define DEBUG
+#define IN_BANK 0
+#define BEGIN_SERVE 1
+#define LEAVE_BANK 2
+#define SERVE_ID 3
 
 class Engine
 {
@@ -32,9 +36,11 @@ public:
     {
         start_time = get_time_stamp_milliseconds();
 
-        for (int i = 0; i < server_num; ++i)
+        customer_served_info.reserve(customers.size());
+        for (int i = 0; i < customers.size(); ++i)
         {
-            served_customer_index.push_back(std::vector<int>());
+            std::vector<int> single_customer_served_info(4);
+            customer_served_info.push_back(single_customer_served_info);
         }
 
         // begin all the server threads
@@ -67,6 +73,8 @@ public:
                 server_threads[i].join();
             }
         }
+
+        output_result();
     }
 
 private:
@@ -83,6 +91,7 @@ private:
             customer_queue.emplace(&customer);
             begin_serve_sem.Up();
             print_thread_safely({"Customer ", std::to_string(customer.get_index()), " is entering the bank"});
+            customer_served_info[customer.get_index()][IN_BANK] = get_time_slice();
         }
 
         // wait the service
@@ -90,6 +99,7 @@ private:
 
         // leave the bank
         print_thread_safely({"Customer ", std::to_string(customer.get_index()), " is leaving the bank"});
+        customer_served_info[customer.get_index()][LEAVE_BANK] = get_time_slice();
     };
 
     void run_server(int server_id)
@@ -112,6 +122,8 @@ private:
                 customer_ptr = customer_queue.front();
                 customer_queue.pop();
                 print_thread_safely({"Server ", std::to_string(server_id), " is serving customer ", std::to_string(customer_ptr->get_index())});
+                customer_served_info[customer_ptr->get_index()][BEGIN_SERVE] = get_time_slice();
+                customer_served_info[customer_ptr->get_index()][SERVE_ID] = server_id;
             }
 
             // service
@@ -162,6 +174,18 @@ private:
         return std::round((float)time_diff / time_slice);
     }
 
+    void output_result()
+    {
+        // output the result into a file, like a table, use customer_served_info
+        std::ofstream fout("output.txt");
+        for (int i = 0; i < customers.size(); ++i)
+        {
+            fout << i << " " \
+                 << customer_served_info[i][IN_BANK] << " " << customer_served_info[i][BEGIN_SERVE] << " " \
+                 << customer_served_info[i][LEAVE_BANK] << " " << customer_served_info[i][SERVE_ID] << std::endl;
+        }
+    }
+
 private:
     int server_num;
     int time_slice;
@@ -170,7 +194,7 @@ private:
     std::vector<Customer> customers;
     std::vector<std::thread> server_threads;
     std::vector<std::thread> customer_threads;
-    std::vector<std::vector<int>> served_customer_index; 
+    std::vector<std::vector<int>> customer_served_info;
     std::queue<Customer*> customer_queue;
     mutable std::mutex enqueue_mtx;
     mutable std::mutex dequeue_mtx;
