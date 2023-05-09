@@ -131,11 +131,22 @@ struct file_operations fops = {
 
 1. 注册字符设备驱动；
 2. 分配管道需要使用的内核缓冲区；
-3. 初始化管道通信所需的信号量；
+3. 初始化管道通信所需的信号量。
 
 代码如下：
 
 ```c
+static int __init mypipe_init(void)
+{
+    int ret;
+    ret = register_chrdev(PIPE_NUMBER, "mypipe", &mypipe_fops);
+    kernel_buffer = kmalloc(PIPE_BUFFER_SIZE, GFP_KERNEL);
+    memset(kernel_buffer, 0, PIPE_BUFFER_SIZE);
+    sema_init(&sem_full, 1);
+    sema_init(&sem_empty, 0);
+    printk(KERN_INFO "mypipe: register device successfully\n");
+    return 0;
+}
 ```
 
 ### 4.2 exit
@@ -143,7 +154,17 @@ struct file_operations fops = {
 在`exit`函数中，需要完成以下几个步骤：
 
 1. 取消注册字符设备驱动；
-2. 释放管道使用的内核缓冲区；
+2. 释放管道使用的内核缓冲区。
+
+代码如下：
+```c
+static void __exit mypipe_exit(void)
+{
+    unregister_chrdev(PIPE_NUMBER, "mypipe");
+    kfree(buffer);
+    printk(KERN_INFO "mypipe: unregister device successfully\n");
+}
+```
 
 ### 4.3 read
 
@@ -156,11 +177,27 @@ struct file_operations fops = {
 
 我们重点使用`buf`和`count`两个参数。
 
+每次读时，将flag置为0。由于我们将buffer建模为环形队列，所以需要分以下情况讨论：
+
+1. `p_write == p_read && flag == 0`：此时缓冲区为空，读将会被阻塞；
+2. `p_write > p_read`：此时缓冲区的内容是连续的，大小为`p_write - p_read`，因此可以直接使用`copy_to_user`函数将缓冲区的内容拷贝到用户空间；
+3. 其他：此时缓冲区的内容是不连续的，大小为`p_write + BUFFER_SIZE - p_read`，因此需要分两次拷贝，第一次拷贝`BUFFER_SIZE - p_read`个字节，第二次拷贝`p_write`个字节。
+
 ### 4.4 write
 
-4个参数的含义同上。
+4个参数的含义同上。每次写时，将flag置为1。同样需要分以下情况讨论：
+
+1. `p_write == p_read && flag == 1`：此时缓冲区已满，写将会被阻塞；
+2. `p_write < p_read`：此时将要被写入的缓冲区是连续的，大小为`p_read - p_write`，因此可以直接使用`copy_from_user`函数将用户空间的内容拷贝到缓冲区；
+3. 其他：此时将要被写入的缓冲区是不连续的，大小为`p_read + BUFFER_SIZE - p_write`，因此需要分两次拷贝，第一次拷贝`BUFFER_SIZE - p_write`个字节，第二次拷贝`p_read`个字节。
 
 注意在实验过程中，可以随时插入`printk`来打印信息，以便于调试。
+
+## 5 实验结果
+
+### 5.1 编译与安装
+
+使用`sudo make`指令编译驱动，得到`mypipe.ko`文件。使用`sudo insmod mypipe.ko`指令安装驱动。
 
 ## 参考文献
 
@@ -189,3 +226,7 @@ https://www.cntofu.com/book/46/linux_system/linuxxi_tong_bian_cheng_zhi_wen_jian
 http://blog.logan.tw/2013/01/linux-driver.html
 
 https://tldp.org/LDP/lkmpg/2.6/html/lkmpg.html
+
+https://www.cnblogs.com/cangqinglang/p/13754849.html
+
+https://kernelnewbies.kernelnewbies.narkive.com/vbBCVcFz/down-and-down-interruptible-difference
