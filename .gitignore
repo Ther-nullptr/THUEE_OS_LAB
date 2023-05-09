@@ -4,3 +4,10 @@ kernel/
 *.png
 main
 .vscode/
+*.cmd
+*.symvers
+*.order
+*.o
+*.mod
+*.mod.c
+*.ko

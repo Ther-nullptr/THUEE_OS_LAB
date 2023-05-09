@@ -89,12 +89,12 @@ static ssize_t mypipe_write(struct file *file, const char __user *buf, size_t co
     return actual_write_length;
 }
 
-static int mypipe_open(struct inode *, struct file *)
+static int mypipe_open(struct inode * inode, struct file * file) 
 {
     return 0;
 }
 
-static int mypipe_release(struct inode *, struct file *)
+static int mypipe_release(struct inode * inode, struct file * file)
 {
     return 0;
 }
