@@ -12,9 +12,10 @@ insert:
 
 install: insert
 	sudo mknod /dev/mypipe c $(shell cat /proc/devices | grep mypipe | awk '{print $$1}') 0
+	sudo chmod 666 /dev/mypipe
 
 uninstall:
-	sudo rmmod mypipe
+	sudo rmmod -f mypipe
 	dmesg | tail -n 1
 	sudo rm -f /dev/mypipe
 
