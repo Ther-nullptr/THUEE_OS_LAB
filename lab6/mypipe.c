@@ -6,6 +6,7 @@
 #include <linux/slab.h>
 
 #define PIPE_BUFFER_SIZE 16
+#define IGNORE_BUFFER_SIZE 16
 #define PIPE_NUMBER 200
 
 #define min(a, b) ((a) < (b) ? (a) : (b))
@@ -29,6 +30,7 @@ static ssize_t mypipe_read(struct file *file, char __user *buf, size_t count, lo
     ssize_t actual_read_length = 0;
     int ret = 0;
     down_interruptible(&sem);
+
     if (p_read == p_write && flag == 0)
     {
         printk(KERN_WARNING":the buffer is empty and will not be readable until the next write");
@@ -60,11 +62,10 @@ static ssize_t mypipe_read(struct file *file, char __user *buf, size_t count, lo
     p_read = (p_read + actual_read_length) % PIPE_BUFFER_SIZE;
     printk(KERN_INFO":change p_read to %zu\n", p_read);
     
-    // wake up the write process
 end_read:
+    // wake up the write process
     up(&sem);
     flag = 0;
-    
     if (ret != 0)
     {
         printk(KERN_ALERT"Error in reading from pipe.\n");
@@ -81,10 +82,11 @@ static ssize_t mypipe_write(struct file *file, const char __user *buf, size_t co
     ssize_t actual_write_length = 0;
     int ret = 0;
     down_interruptible(&sem);
+
     if (p_read == p_write && flag == 1)
     {
         printk(KERN_WARNING":the buffer is full and will not be writeable until the next read");
-        actual_write_length = PIPE_BUFFER_SIZE;
+        actual_write_length = IGNORE_BUFFER_SIZE;
         goto end_write;
     }
     
@@ -150,6 +152,7 @@ static int __init mypipe_init(void)
     int ret;
     ret = register_chrdev(PIPE_NUMBER, "mypipe", &mypipe_fops);
     kernel_buffer = kmalloc(PIPE_BUFFER_SIZE, GFP_KERNEL);
+    memset(kernel_buffer, 0, PIPE_BUFFER_SIZE);
     mutex_init(&mutex_buffer);
     sema_init(&sem, 1);
     printk(KERN_INFO":mypipe register successfully\n");
