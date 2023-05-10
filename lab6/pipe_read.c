@@ -1,16 +1,30 @@
+#include <fcntl.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
 
 int main(int argc, char *argv[])
 {
-    // open the file /dev/mypipe
-    FILE *fp = fopen("/dev/mypipe", "r");
+    int fd = open("/dev/mypipe", O_RDONLY | O_NONBLOCK);
+    if (fd < 0)
+    {
+        perror("[ERROR] Fail to open pipe for reading data.\n");
+        exit(1);
+    }
+    
     int n = atoi(argv[1]);
-
-    // read n numbers from the pipe
+    
+    char *buffer;
+    buffer = (char *)malloc(n * sizeof(char));
+    read(fd, buffer, n);
+    
     for (int i = 0; i < n; i++)
     {
-        int num;
-        fscanf(fp, "%d", &num);
-        printf("read %d\n", num);
+        printf("read %c\n", buffer[i]);
     }
+    
+    close(fd);
+    free(buffer);
+    return 0;
 }
