@@ -14,26 +14,30 @@ MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Ther-nullptr");
 MODULE_DESCRIPTION("a pipe");
 
-int flag; // to detect whether the buffer is full or empty 
-int p_read; // the pointer to read
-int p_write; // the pointer to write
-char* kernel_buffer; // the buffer in kernel space
+static int flag; // to detect whether the buffer is full or empty 
+static ssize_t p_read; // the pointer to read
+static ssize_t p_write; // the pointer to write
+static char* kernel_buffer; // the buffer in kernel space
 
-struct semaphore sem_full;
-struct semaphore sem_empty;
+static struct mutex mutex_buffer;
+static struct semaphore sem_full;
+static struct semaphore sem_empty;
 
 static ssize_t mypipe_read(struct file *file, char __user *buf, size_t count, loff_t *f_pos)
 {
+    // lock the buffer
+    mutex_lock_killable(&mutex_buffer);
     ssize_t actual_read_length = 0;
-    if (flag == 0 && p_read == p_write)
+    int ret = 0;
+    while (flag == 0 && p_read == p_write) // wait until the buffer is readable
     {
         // block the read process
         down_interruptible(&sem_empty);
     }
-    else if (p_read < p_write)
+    if (p_read < p_write)
     {
         actual_read_length = min(count, p_write - p_read); // the actual length to read is limited by the length of the buffer
-        copy_to_user(buf, kernel_buffer + p_read, actual_read_length);
+        ret |= copy_to_user(buf, kernel_buffer + p_read, actual_read_length);
     }
     else
     {
@@ -41,32 +45,42 @@ static ssize_t mypipe_read(struct file *file, char __user *buf, size_t count, lo
         ssize_t max_no_iterable = PIPE_BUFFER_SIZE - p_read;
         if (actual_read_length <= max_no_iterable)
         {
-            copy_to_user(buf, kernel_buffer + p_read, actual_read_length);
+            ret |= copy_to_user(buf, kernel_buffer + p_read, actual_read_length);
         }
         else
         {
-            copy_to_user(buf, kernel_buffer + p_read, max_no_iterable);
-            copy_to_user(buf + max_no_iterable, kernel_buffer, actual_read_length - max_no_iterable);
+            ret |= copy_to_user(buf, kernel_buffer + p_read, max_no_iterable);
+            ret |= copy_to_user(buf + max_no_iterable, kernel_buffer, actual_read_length - max_no_iterable);
         }
     }
     p_read = (p_read + actual_read_length) % PIPE_BUFFER_SIZE;
     flag = 0; // buffer will become empty after reading
     // wake up the write process
     up(&sem_full);
+    if (ret != 0)
+    {
+        printk(KERN_ALERT "Error in reading from pipe.\n");
+        return -EFAULT;
+    }
+
+    mutex_unlock(&mutex_buffer);
     return actual_read_length;
 }
 
 static ssize_t mypipe_write(struct file *file, const char __user *buf, size_t count, loff_t *f_pos)
 {
+    // lock the buffer
+    mutex_lock_killable(&mutex_buffer);
     ssize_t actual_write_length = 0;
-    if (flag == 1 && p_read == p_write)
+    int ret = 0;
+    while (flag == 1 && p_read == p_write) // wait until the buffer is writable
     {
         down_interruptible(&sem_full);
     }
     if (p_read > p_write)
     {
         actual_write_length = min(count, p_read - p_write);
-        copy_from_user(kernel_buffer + p_write, buf, actual_write_length);
+        ret |= copy_from_user(kernel_buffer + p_write, buf, actual_write_length);
     }
     else
     {
@@ -74,18 +88,23 @@ static ssize_t mypipe_write(struct file *file, const char __user *buf, size_t co
         ssize_t max_no_iterable = PIPE_BUFFER_SIZE - p_write;
         if (actual_write_length <= max_no_iterable)
         {
-            copy_from_user(kernel_buffer + p_write, buf, actual_write_length);
+            ret |= copy_from_user(kernel_buffer + p_write, buf, actual_write_length);
         }
         else
         {
-            copy_from_user(kernel_buffer + p_write, buf, max_no_iterable);
-            copy_from_user(kernel_buffer, buf + max_no_iterable, actual_write_length - max_no_iterable);
+            ret |= copy_from_user(kernel_buffer + p_write, buf, max_no_iterable);
+            ret |= copy_from_user(kernel_buffer, buf + max_no_iterable, actual_write_length - max_no_iterable);
         }
     }
     p_write = (p_write + actual_write_length) % PIPE_BUFFER_SIZE;
     flag = 1; // buffer will become full after writing
     // wake up the read process
     up(&sem_empty);
+    if (ret != 0)
+    {
+        printk(KERN_INFO "Error in writing to pipe.\n");
+    }
+    mutex_unlock(&mutex_buffer);
     return actual_write_length;
 }
 
