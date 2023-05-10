@@ -197,7 +197,57 @@ static void __exit mypipe_exit(void)
 
 ### 5.1 编译与安装
 
-使用`sudo make`指令编译驱动，得到`mypipe.ko`文件。使用`sudo insmod mypipe.ko`指令安装驱动。
+为方便管理驱动的编译，编写`Makefile`如下：
+
+```makefile
+obj-m += mypipe.o
+KERNELBUILD := /lib/modules/$(shell uname -r)/build
+default:
+	make -C $(KERNELBUILD) M=$(PWD) modules
+clean:
+	make -C $(KERNELBUILD) M=$(PWD) clean
+```
+
+使用`sudo make`指令编译驱动，得到`mypipe.ko`文件。
+
+使用以下指令安装驱动：
+
+```bash
+sudo insmod mypipe.ko
+dmesg | tail -n 1
+```
+
+显示结果如下，说明安装成功：
+```bash
+[  243.705553] mypipe: register device successfully
+```
+
+若想卸载驱动，使用以下指令：
+
+```bash
+sudo rmmod mypipe
+dmesg | tail -n 1
+```
+
+显示结果如下，说明卸载成功：
+```bash
+[  259.466596] mypipe: unregister device successfully
+```
+### 5.2 测试
+
+#### 5.2.1 测试样例1
+
+编写以下测试样例：
+
+```c
+```
+
+#### 5.2.2 测试样例2
+
+编写以下测试样例：
+
+```c
+```
 
 ## 参考文献
 
