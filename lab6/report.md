@@ -6,7 +6,7 @@
 
 ## 2 实验平台
 
-本实验在x86_64 平台的Ubuntu 20.04 LTS 操作系统上进行，编程语言采用C++11，构建工具采用GNU Make 4.2.1。
+本实验在x86_64平台的Ubuntu 20.04 LTS 操作系统上进行，编程语言采用C++11，构建工具采用GNU Make 4.2.1。
 
 ## 3 实验原理
 
@@ -123,7 +123,7 @@ struct file_operations fops = {
 2. 当`p_write > p_read`时，说明缓冲区的内容是连续的，此时缓冲区的大小为`p_write - p_read`；
 3. 当`p_write < p_read`时，说明缓冲区的内容是不连续的，此时缓冲区的大小为`p_write + BUFFER_SIZE - p_read`；
 
-当缓冲区为空时，读操作会阻塞，直到缓冲区中有数据；当缓冲区满时，写操作会阻塞，直到缓冲区中有空间。因此需要使用两个信号量`sem_empty`和`sem_full`来实现这一功能。
+当进行读操作时，写操作会被阻塞；当进行写操作时，读操作会被阻塞。
 
 ### 4.1 init
 
@@ -131,7 +131,7 @@ struct file_operations fops = {
 
 1. 注册字符设备驱动；
 2. 分配管道需要使用的内核缓冲区；
-3. 初始化管道通信所需的信号量。
+3. 初始化管道通信所需的信号量/互斥锁。
 
 代码如下：
 
@@ -142,9 +142,9 @@ static int __init mypipe_init(void)
     ret = register_chrdev(PIPE_NUMBER, "mypipe", &mypipe_fops);
     kernel_buffer = kmalloc(PIPE_BUFFER_SIZE, GFP_KERNEL);
     memset(kernel_buffer, 0, PIPE_BUFFER_SIZE);
-    sema_init(&sem_full, 1);
-    sema_init(&sem_empty, 0);
-    printk(KERN_INFO "mypipe: register device successfully\n");
+    mutex_init(&mutex_buffer);
+    sema_init(&sem, 1);
+    printk(KERN_INFO":mypipe register successfully\n");
     return 0;
 }
 ```
@@ -154,15 +154,19 @@ static int __init mypipe_init(void)
 在`exit`函数中，需要完成以下几个步骤：
 
 1. 取消注册字符设备驱动；
-2. 释放管道使用的内核缓冲区。
+2. 释放管道使用的内核缓冲区；
+3. 删除管道通信所需的信号量/互斥锁。
 
 代码如下：
+
 ```c
 static void __exit mypipe_exit(void)
 {
     unregister_chrdev(PIPE_NUMBER, "mypipe");
-    kfree(buffer);
-    printk(KERN_INFO "mypipe: unregister device successfully\n");
+    kfree(kernel_buffer);
+    sema_init(&sem, 0);
+    mutex_destroy(&mutex_buffer);
+    printk(KERN_INFO":mypipe unregister successfully\n");
 }
 ```
 
@@ -179,17 +183,136 @@ static void __exit mypipe_exit(void)
 
 每次读时，将flag置为0。由于我们将buffer建模为环形队列，所以需要分以下情况讨论：
 
-1. `p_write == p_read && flag == 0`：此时缓冲区为空，读将会被阻塞；
-2. `p_write > p_read`：此时缓冲区的内容是连续的，大小为`p_write - p_read`，因此可以直接使用`copy_to_user`函数将缓冲区的内容拷贝到用户空间；
-3. 其他：此时缓冲区的内容是不连续的，大小为`p_write + BUFFER_SIZE - p_read`，因此需要分两次拷贝，第一次拷贝`BUFFER_SIZE - p_read`个字节，第二次拷贝`p_write`个字节。
+1. `p_write == p_read && flag == 0`：此时缓冲区为空，不进行读操作；
+2. `p_write > p_read`：此时缓冲区的内容一定是连续的，空闲缓冲区大小为`p_write - p_read`，因此可以直接使用`copy_to_user`函数将缓冲区的内容拷贝到用户空间；
+3. 其他：此时缓冲区的内容可能是不连续的，空闲缓冲区大小为`p_write + BUFFER_SIZE - p_read`，当写入的缓冲区不连续时，需要分两次拷贝，第一次拷贝`BUFFER_SIZE - p_read`个字节，第二次拷贝`p_write`个字节。
+
+处理逻辑如图所示：
+
+![b11dea8d75bbf6f6c554c128c0ab032.jpg](https://s2.loli.net/2023/05/10/O9oLYTwhsiH87xB.jpg)
+
+```c
+static ssize_t mypipe_read(struct file *file, char __user *buf, size_t count, loff_t *f_pos)
+{
+    // lock the buffer
+    mutex_lock_killable(&mutex_buffer);
+    ssize_t actual_read_length = 0;
+    int ret = 0;
+    down_interruptible(&sem);
+
+    if (p_read == p_write && flag == 0)
+    {
+        printk(KERN_WARNING":the buffer is empty and will not be readable until the next write");
+        goto end_read;
+    }
+    
+    if (p_read < p_write)
+    {
+        actual_read_length = min(count, p_write - p_read); // the actual length to read is limited by the length of the buffer
+        ret |= copy_to_user(buf, kernel_buffer + p_read, actual_read_length);
+    }
+    else
+    {
+        actual_read_length = min(count, PIPE_BUFFER_SIZE - (p_read - p_write));
+        ssize_t max_no_iterable = PIPE_BUFFER_SIZE - p_read;
+        if (actual_read_length <= max_no_iterable)
+        {
+            ret |= copy_to_user(buf, kernel_buffer + p_read, actual_read_length);
+        }
+        else
+        {
+            ret |= copy_to_user(buf, kernel_buffer + p_read, max_no_iterable);
+            ret |= copy_to_user(buf + max_no_iterable, kernel_buffer, actual_read_length - max_no_iterable);
+        }
+    }
+    
+    printk(KERN_INFO":read %zu bytes\n", actual_read_length);
+    printk(KERN_INFO":p_read before %zu\n", p_read);
+    p_read = (p_read + actual_read_length) % PIPE_BUFFER_SIZE;
+    printk(KERN_INFO":change p_read to %zu\n", p_read);
+    
+end_read:
+    // wake up the write process
+    up(&sem);
+    flag = 0;
+    if (ret != 0)
+    {
+        printk(KERN_ALERT"Error in reading from pipe.\n");
+        return -EFAULT;
+    }
+    mutex_unlock(&mutex_buffer);
+    return actual_read_length;
+}
+```
 
 ### 4.4 write
 
 4个参数的含义同上。每次写时，将flag置为1。同样需要分以下情况讨论：
 
-1. `p_write == p_read && flag == 1`：此时缓冲区已满，写将会被阻塞；
-2. `p_write < p_read`：此时将要被写入的缓冲区是连续的，大小为`p_read - p_write`，因此可以直接使用`copy_from_user`函数将用户空间的内容拷贝到缓冲区；
-3. 其他：此时将要被写入的缓冲区是不连续的，大小为`p_read + BUFFER_SIZE - p_write`，因此需要分两次拷贝，第一次拷贝`BUFFER_SIZE - p_write`个字节，第二次拷贝`p_read`个字节。
+1. `p_write == p_read && flag == 1`：此时缓冲区已满，不进行写操作；
+2. `p_write < p_read`：此时将要被写入的缓冲区一定是连续的，空闲缓冲区大小为`p_read - p_write`，因此可以直接使用`copy_from_user`函数将用户空间的内容拷贝到缓冲区；
+3. 其他：此时将要被写入的缓冲区可能是不连续的，空闲缓冲区大小为`p_read + BUFFER_SIZE - p_write`，当写入的缓冲区不连续时，需要分两次拷贝，第一次拷贝`BUFFER_SIZE - p_write`个字节，第二次拷贝`p_read`个字节。
+
+处理逻辑如图所示：
+
+![be7a94856ec48e7da0344c07800d13c.jpg](https://s2.loli.net/2023/05/10/PTLSWs41RcyxvoC.jpg)
+
+这里特别注意，当buffer满的时候，我们需要将`actual_write_length`设置为`IGNORE_BUFFER_SIZE`，否则用户空间的`write`函数会一直阻塞。
+
+```c
+static ssize_t mypipe_write(struct file *file, const char __user *buf, size_t count, loff_t *f_pos)
+{
+    // lock the buffer
+    mutex_lock_killable(&mutex_buffer);
+    ssize_t actual_write_length = 0;
+    int ret = 0;
+    down_interruptible(&sem);
+
+    if (p_read == p_write && flag == 1)
+    {
+        printk(KERN_WARNING":the buffer is full and will not be writeable until the next read");
+        actual_write_length = IGNORE_BUFFER_SIZE;
+        goto end_write;
+    }
+    
+    if (p_read > p_write)
+    {
+        actual_write_length = min(count, p_read - p_write);
+        ret |= copy_from_user(kernel_buffer + p_write, buf, actual_write_length);
+    }
+    else
+    {
+        actual_write_length = min(count, PIPE_BUFFER_SIZE - (p_write - p_read));
+        ssize_t max_no_iterable = PIPE_BUFFER_SIZE - p_write;
+        if (actual_write_length <= max_no_iterable)
+        {
+            ret |= copy_from_user(kernel_buffer + p_write, buf, actual_write_length);
+        }
+        else
+        {
+            ret |= copy_from_user(kernel_buffer + p_write, buf, max_no_iterable);
+            ret |= copy_from_user(kernel_buffer, buf + max_no_iterable, actual_write_length - max_no_iterable);
+        }
+    }
+    
+    printk(KERN_INFO":write %zu bytes\n", actual_write_length);
+    printk(KERN_INFO":p_write before %zu\n", p_write);
+    p_write = (p_write + actual_write_length) % PIPE_BUFFER_SIZE;
+    printk(KERN_INFO":change p_write to %zu\n", p_write);
+
+end_write:
+    // wake up the read process
+    up(&sem);
+    flag = 1;
+    
+    if (ret != 0)
+    {
+        printk(KERN_INFO":Error in writing to pipe.\n");
+    }
+    mutex_unlock(&mutex_buffer);
+    return actual_write_length;
+}
+```
 
 注意在实验过程中，可以随时插入`printk`来打印信息，以便于调试。
 
@@ -210,16 +333,22 @@ clean:
 
 使用`sudo make`指令编译驱动，得到`mypipe.ko`文件。
 
-使用以下指令安装驱动：
+使用以下指令载入驱动：
 
 ```bash
 sudo insmod mypipe.ko
 dmesg | tail -n 1
 ```
 
-显示结果如下，说明安装成功：
+显示结果如下，说明载入成功：
 ```bash
 [  243.705553] mypipe: register device successfully
+```
+
+安装设备：
+```bash
+sudo mknod /dev/mypipe c 200 0 # c: char device, 400: major number, 0: minor number 
+sudo chmod 666 /dev/mypipe
 ```
 
 若想卸载驱动，使用以下指令：
@@ -227,6 +356,7 @@ dmesg | tail -n 1
 ```bash
 sudo rmmod mypipe
 dmesg | tail -n 1
+sudo rm -f /dev/mypipe
 ```
 
 显示结果如下，说明卸载成功：
@@ -235,48 +365,111 @@ dmesg | tail -n 1
 ```
 ### 5.2 测试
 
-#### 5.2.1 测试样例1
+为了方便说明问题，我们将`mypipe`的buffer size设置为16，不过在实际应用场景中，这一值应该为4096。
+#### 5.2.1 命令行操作
 
-编写以下测试样例：
+我们模拟linux中命名管道的操作：
 
-```c
+```bash
+$ sudo echo 114514 > /dev/mypipe
+$ sudo echo 114514 > /dev/mypipe
+$ sudo echo 1919810 > /dev/mypipe
+$ sudo cat /dev/mypipe 
 ```
 
-#### 5.2.2 测试样例2
-
-编写以下测试样例：
-
-```c
+输出结果如下：
+```bash
+114514
+114514
+19
 ```
 
-## 参考文献
+使用`dmesg`查看日志：
 
-https://zhuanlan.zhihu.com/p/442934053
+![image.png](https://s2.loli.net/2023/05/10/WnJH9FmqlXDPe8B.png)
 
-https://zhuanlan.zhihu.com/p/47168082
+可见其工作逻辑符合预期。
 
-https://zhuanlan.zhihu.com/p/58489873
+#### 5.2.2 模拟文件读写
 
-https://www.cnblogs.com/Anker/p/3271773.html
+编写两个测试程序，一个向`mypipe`写入数据，另一个从`mypipe`读取数据：
 
-https://segmentfault.com/a/1190000009528245
+```c
+// pipe_write.c
+#include <fcntl.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
 
-https://github.com/torvalds/linux/blob/master/fs/pipe.c
+#define PIPE_BUFFER_SIZE 16
 
-https://www.cnblogs.com/52php/tag/%E8%BF%9B%E7%A8%8B%E9%80%9A%E4%BF%A1/
+int main(int argc, char *argv[])
+{
+    char buffer[PIPE_BUFFER_SIZE];
 
-https://man7.org/linux/man-pages/man2/memfd_create.2.html
+    int fd = open("/dev/mypipe", O_WRONLY | O_NONBLOCK);
+    if (fd < 0)
+    {
+        perror("[ERROR] Fail to open pipe for writing data.\n");
+        exit(1);
+    }
+    
+    int n = atoi(argv[1]);
 
-https://drustz.com/posts/2015/09/27/step-by-step-shell1/#a5
+    // write n numbers to the pipe
+    for (int i = 0; i < n; i++)
+    {
+        buffer[i] = i + 97;
+        printf("write %c\n", i + 97);
+    }
+    
+    write(fd, &buffer, strlen(buffer));
+    close(fd);
+    return 0;
+}
+```
 
-https://zorrozou.github.io/docs/books/linuxde-jin-cheng-jian-tong-xin-guan-dao.html
+```cpp
+// pipe_read.c
+#include <fcntl.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
 
-https://www.cntofu.com/book/46/linux_system/linuxxi_tong_bian_cheng_zhi_wen_jian_yu_io_ff08_ba.md
+int main(int argc, char *argv[])
+{
+    int fd = open("/dev/mypipe", O_RDONLY | O_NONBLOCK);
+    if (fd < 0)
+    {
+        perror("[ERROR] Fail to open pipe for reading data.\n");
+        exit(1);
+    }
+    
+    int n = atoi(argv[1]);
+    
+    char *buffer;
+    buffer = (char *)malloc(n * sizeof(char));
+    read(fd, buffer, n);
+    
+    for (int i = 0; i < n; i++)
+    {
+        printf("read %c\n", buffer[i]);
+    }
+    
+    close(fd);
+    free(buffer);
+    return 0;
+}
+```
 
-http://blog.logan.tw/2013/01/linux-driver.html
+测试结果如下：
 
-https://tldp.org/LDP/lkmpg/2.6/html/lkmpg.html
+![image.png](https://s2.loli.net/2023/05/10/ZvVquKmSGR35j8w.png)
 
-https://www.cnblogs.com/cangqinglang/p/13754849.html
+运行日志：
 
-https://kernelnewbies.kernelnewbies.narkive.com/vbBCVcFz/down-and-down-interruptible-difference
+![image.png](https://s2.loli.net/2023/05/10/1fKSnWJDuRxXm2E.png)
+
+可以看到，该驱动设备的工作符合预期。
