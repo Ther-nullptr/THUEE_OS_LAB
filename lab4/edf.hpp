@@ -24,19 +24,21 @@ struct cmp
 class EDF
 {
 public:
-    EDF(event_queue_type &events) {}
+    EDF() {}
 
-    void run(event_queue_type &events, int total_time)
+    std::vector<Result> run(event_queue_type &events, int total_time)
     {
-        for (int i = 0; i <= total_time; i++)
+        int i = 0;
+        while(1)
         {
-            if (events.empty())
+            if (events.empty() && event_schedule_queue.empty() && !is_running)
             {
                 break;
             }
 
+            // prepare the event schedule queue
             Event event = events.top();
-            while (event.in_time == i)
+            while (event.in_time == i - 1)
             {
                 events.pop();
                 event_schedule_queue.push(event);
@@ -46,10 +48,39 @@ public:
                 }
                 event = events.top();
             }
+
+            // execute the event
+            int start_time;
+            if (!is_running)
+            {
+                if (!event_schedule_queue.empty())
+                {
+                    current_event = event_schedule_queue.top();
+                    event_schedule_queue.pop();
+                    start_time = i; // begin to run
+                    is_running = true;
+                }
+            }
+
+            if (is_running)
+            {
+                current_event.time_pointer = current_event.time_pointer + 1;
+                if (current_event.time_pointer == current_event.total_run_time) // finish running
+                {
+                    Result result{current_event.in_time, current_event.stop_time, start_time - 1, i, current_event.event_name};
+                    results.push_back(result);
+                    is_running = false;
+                }
+            }
+
+            i++;
         }
+        return results;
     }
 
 private:
+    bool is_running = false;
+    Event current_event;
     std::vector<Result> results;
     std::priority_queue<Event, std::vector<Event>, cmp> event_schedule_queue;
 };
