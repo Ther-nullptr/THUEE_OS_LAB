@@ -2,6 +2,7 @@
 #include <vector>
 #include <fstream>
 #include <algorithm>
+#include <queue>
 
 #include "event.hpp"
 
@@ -30,7 +31,7 @@ int main(int argc, char **argv)
     int index, is_cycle, in_time, period_or_stop_time, run_time, total_time;
     std::ifstream infile(test_file_name);
     infile >> total_time;
-    std::vector<Event> event_vector;
+    std::priority_queue<Event, std::vector<Event>, std::less<Event>> event_queue;
 
     while(infile >> index >> is_cycle >> in_time >> period_or_stop_time >> run_time)
     {
@@ -47,7 +48,7 @@ int main(int argc, char **argv)
                     break;
                 }
                 Event event{actual_in_time, run_time, actual_in_time + period_or_stop_time, 0, event_name};
-                event_vector.push_back(event);
+                event_queue.push(event);
                 i++;
             }
         }
@@ -55,17 +56,20 @@ int main(int argc, char **argv)
         {
             // aperiodic task
             Event event{in_time, run_time, period_or_stop_time, 0, event_name};
-            event_vector.push_back(event);
+            event_queue.push(event);
         }
         event_name++;
-    }
+    } 
 
     // print scheduled events
     std::cout << "Total time: " << total_time << std::endl;
     std::cout << "Scheduled events: " << std::endl;
     std::cout << "event_name in_time total_run_time stop_time" << std::endl;
-    for (int i = 0; i < event_vector.size(); ++i)
+    int size = event_queue.size();
+    for (int i = 0; i < size; ++i)
     {
-        std::cout << event_vector[i].event_name << " " << event_vector[i].in_time << " " << event_vector[i].total_run_time << " " << event_vector[i].stop_time << std::endl;
+        Event event = event_queue.top();
+        event_queue.pop();
+        std::cout << event.event_name << " " << event.in_time << " " << event.total_run_time << " " << event.stop_time << std::endl;
     }
 }

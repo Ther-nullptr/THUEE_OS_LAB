@@ -8,6 +8,12 @@ struct Event
     int stop_time;
     int time_pointer; // a pointer to the current run time
     char event_name;
+    int priority;
+
+    bool operator < (const Event &b) const
+    {
+        return in_time > b.in_time;
+    }
 };
 
 #endif // !EVENT_HPP
