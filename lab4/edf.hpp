@@ -94,5 +94,4 @@ private:
     std::priority_queue<Event, std::vector<Event>, edf_cmp> event_schedule_queue;
 };
 
-
 #endif // !EDF_HPP

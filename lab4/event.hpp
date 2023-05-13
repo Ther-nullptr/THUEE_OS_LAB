@@ -8,7 +8,8 @@ struct Event
     int stop_time;
     int time_pointer; // a pointer to the current run time
     char event_name;
-    int priority;
+    int priority; // only for RMS
+    int laxity; // only for LLF
 
     bool operator < (const Event &b) const
     {

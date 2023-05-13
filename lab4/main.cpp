@@ -78,9 +78,9 @@ int main(int argc, char **argv)
     // }
 
     // print the result
-    RMS rms;
+    LLF llf;
     std::cout << "Result: " << std::endl;
-    auto result_pair = rms.run(event_queue, total_time);
+    auto result_pair = llf.run(event_queue, total_time);
     auto result = result_pair.first;
     bool is_success = result_pair.second;
     if (!is_success)
