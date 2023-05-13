@@ -7,9 +7,10 @@
 #include "result.hpp"
 
 using event_queue_type = std::priority_queue<Event, std::vector<Event>, std::less<Event>>;
+using result_pair = std::pair<std::vector<Result>, bool>;
 
 // compare function for priority queue in EDF algorithm
-struct cmp
+struct edf_cmp
 {
     bool operator()(const Event &a, const Event &b)
     {
@@ -26,7 +27,7 @@ class EDF
 public:
     EDF() {}
 
-    std::vector<Result> run(event_queue_type &events, int total_time)
+    result_pair run(event_queue_type &events, int total_time)
     {
         int i = 0;
         while(1)
@@ -65,6 +66,13 @@ public:
             if (is_running)
             {
                 current_event.time_pointer = current_event.time_pointer + 1;
+
+                if (i > current_event.stop_time) // fail to schedule
+                {
+                    succeed = false;
+                    break;
+                }
+
                 if (current_event.time_pointer == current_event.total_run_time) // finish running
                 {
                     Result result{current_event.in_time, current_event.stop_time, start_time - 1, i, current_event.event_name};
@@ -75,14 +83,15 @@ public:
 
             i++;
         }
-        return results;
+        return std::make_pair(results, succeed);
     }
 
 private:
     bool is_running = false;
+    bool succeed = true;
     Event current_event;
     std::vector<Result> results;
-    std::priority_queue<Event, std::vector<Event>, cmp> event_schedule_queue;
+    std::priority_queue<Event, std::vector<Event>, edf_cmp> event_schedule_queue;
 };
 
 

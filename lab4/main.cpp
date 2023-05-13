@@ -7,6 +7,8 @@
 #include "event.hpp"
 #include "result.hpp"
 #include "edf.hpp"
+#include "llf.hpp"
+#include "rms.hpp"
 
 enum class schedule_method
 {
@@ -49,7 +51,7 @@ int main(int argc, char **argv)
                 {
                     break;
                 }
-                Event event{actual_in_time, run_time, actual_in_time + period_or_stop_time, 0, event_name};
+                Event event{actual_in_time, run_time, actual_in_time + period_or_stop_time, 0, event_name, 1000 / period_or_stop_time};
                 event_queue.push(event);
                 i++;
             }
@@ -76,9 +78,15 @@ int main(int argc, char **argv)
     // }
 
     // print the result
-    EDF edf;
+    RMS rms;
     std::cout << "Result: " << std::endl;
-    auto result = edf.run(event_queue, total_time);
+    auto result_pair = rms.run(event_queue, total_time);
+    auto result = result_pair.first;
+    bool is_success = result_pair.second;
+    if (!is_success)
+    {
+        std::cout << "Fail to schedule the events." << std::endl;
+    }
     std::cout << "event_name in_time stop_time response_begin_time response_end_time" << std::endl;
     for (int i = 0; i < result.size(); ++i)
     {
