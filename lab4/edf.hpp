@@ -5,9 +5,7 @@
 #include <queue>
 #include "event.hpp"
 #include "result.hpp"
-
-using event_queue_type = std::priority_queue<Event, std::vector<Event>, std::less<Event>>;
-using result_pair = std::pair<std::vector<Result>, bool>;
+#include "strategy.hpp"
 
 // compare function for priority queue in EDF algorithm
 struct edf_cmp
@@ -22,12 +20,12 @@ struct edf_cmp
     }
 };
 
-class EDF
+class EDF: public Strategy
 {
 public:
     EDF() {}
 
-    result_pair run(event_queue_type &events, int total_time)
+    result_pair run(event_queue_type &events, int total_time) override
     {
         int i = 0;
         while(1)
@@ -80,17 +78,12 @@ public:
                     is_running = false;
                 }
             }
-
             i++;
         }
         return std::make_pair(results, succeed);
     }
 
 private:
-    bool is_running = false;
-    bool succeed = true;
-    Event current_event;
-    std::vector<Result> results;
     std::priority_queue<Event, std::vector<Event>, edf_cmp> event_schedule_queue;
 };
 

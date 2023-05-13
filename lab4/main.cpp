@@ -19,7 +19,19 @@ enum class schedule_method
 
 int main(int argc, char **argv)
 {
+    schedule_method method = schedule_method::RMS;
     std::string test_file_name = "test.txt";
+
+    if (argc > 1)
+    {
+        method = std::atoi(argv[1]) == 1 ? schedule_method::RMS : std::atoi(argv[1]) == 2 ? schedule_method::EDF : schedule_method::LLF;
+        std::cout << "method: " << (method == schedule_method::RMS ? "RMS" : method == schedule_method::EDF ? "EDF" : "LLF") << std::endl;
+    }
+    else
+    {
+        std::cout << "help: ./main [ R(1) | E(2) | L(3) ] " << std::endl;
+        return 0;
+    }
 
     // open the file to read the data
     char event_name = 'A';
@@ -54,33 +66,45 @@ int main(int argc, char **argv)
             event_queue.push(event);
         }
         event_name++;
-    } 
-
-    //// print scheduled events
-    // std::cout << "Total time: " << total_time << std::endl;
-    // std::cout << "Scheduled events: " << std::endl;
-    // std::cout << "event_name in_time total_run_time stop_time" << std::endl;
-    // int size = event_queue.size();
-    // for (int i = 0; i < size; ++i)
-    // {
-    //     Event event = event_queue.top();
-    //     event_queue.pop();
-    //     std::cout << event.event_name << " " << event.in_time << " " << event.total_run_time << " " << event.stop_time << std::endl;
-    // }
+    }
 
     // print the result
-    LLF llf;
-    std::cout << "Result: " << std::endl;
-    auto result_pair = llf.run(event_queue, total_time);
-    auto result = result_pair.first;
+    Strategy *strategy;
+    switch (method)
+    {
+        case schedule_method::RMS:
+            strategy = new RMS();
+            break;
+        case schedule_method::EDF:
+            strategy = new EDF();
+            break;
+        case schedule_method::LLF:
+            strategy = new LLF();
+            break;
+        default:
+            std::cout << "Invalid method." << std::endl;
+            return 0;
+    }
+
+    result_pair result_pair = strategy->run(event_queue, total_time);
+    std::vector<Result> result = result_pair.first;
     bool is_success = result_pair.second;
     if (!is_success)
     {
-        std::cout << "Fail to schedule the events." << std::endl;
+        // print with red color
+        std::cout << "\033[31mFail to schedule the events.\033[0m" << std::endl;
     }
+    else
+    {
+        std::cout << "\033[32mSuccess to schedule the events.\033[0m" << std::endl;
+    }
+
+    std::cout << "Result: " << std::endl;
     std::cout << "event_name in_time stop_time response_begin_time response_end_time" << std::endl;
     for (int i = 0; i < result.size(); ++i)
     {
         std::cout << result[i].event_name << result[i].index << " " << result[i].in_time << " " << result[i].stop_time << " " << result[i].response_begin_time << " " << result[i].response_end_time << std::endl;
     }
+
+    delete strategy;
 }

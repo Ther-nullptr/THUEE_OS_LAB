@@ -5,9 +5,7 @@
 #include <queue>
 #include "event.hpp"
 #include "result.hpp"
-
-using event_queue_type = std::priority_queue<Event, std::vector<Event>, std::less<Event>>;
-using result_pair = std::pair<std::vector<Result>, bool>;
+#include "strategy.hpp"
 
 // compare function for priority queue in LLF algorithm
 struct llf_cmp
@@ -22,12 +20,12 @@ struct llf_cmp
     }
 };
 
-class LLF
+class LLF: public Strategy
 {
 public:
     LLF() {}
 
-    result_pair run(event_queue_type &events, int total_time)
+    result_pair run(event_queue_type &events, int total_time) override
     {
         int i = 0;
         while(1)
@@ -121,12 +119,8 @@ public:
     }
 
 private:
-    bool is_running = false;
-    bool succeed = true;
-    bool event_arrive = false;
-    Event current_event;
-    std::vector<Result> results;
     std::priority_queue<Event, std::vector<Event>, llf_cmp> event_schedule_queue;
+    bool event_arrive = false;
 };
 
 #endif // !LLF_HPP

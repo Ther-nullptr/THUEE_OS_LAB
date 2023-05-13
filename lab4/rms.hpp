@@ -6,6 +6,7 @@
 #include <utility>
 #include "event.hpp"
 #include "result.hpp"
+#include "strategy.hpp"
 
 using event_queue_type = std::priority_queue<Event, std::vector<Event>, std::less<Event>>;
 using result_pair = std::pair<std::vector<Result>, bool>;
@@ -23,12 +24,12 @@ struct rms_cmp
     }
 };
 
-class RMS
+class RMS: public Strategy
 {
 public:
     RMS() {}
 
-    result_pair run(event_queue_type &events, int total_time)
+    result_pair run(event_queue_type &events, int total_time) override
     {
         int i = 0;
         while(1)
@@ -104,10 +105,6 @@ public:
     }
 
 private:
-    bool is_running = false;
-    bool succeed = true;
-    Event current_event;
-    std::vector<Result> results;
     std::priority_queue<Event, std::vector<Event>, rms_cmp> event_schedule_queue;
 };
 
