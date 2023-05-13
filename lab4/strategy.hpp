@@ -16,6 +16,7 @@ public:
     Strategy() {}
     virtual ~Strategy() {}
     virtual result_pair run(event_queue_type &events, int total_time) = 0;
+    virtual void preemption(int start_time, int end_time) = 0;
 
 protected:
     bool is_running = false;

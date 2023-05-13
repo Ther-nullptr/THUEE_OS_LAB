@@ -99,10 +99,14 @@ int main(int argc, char **argv)
         std::cout << "\033[32mSuccess to schedule the events.\033[0m" << std::endl;
     }
 
+    // file to write the result
+    std::ofstream outfile("result.txt");
     std::cout << "Result: " << std::endl;
     std::cout << "event_name in_time stop_time response_begin_time response_end_time" << std::endl;
     for (int i = 0; i < result.size(); ++i)
     {
+        // write to file and print to console at the same time
+        outfile << result[i].event_name << result[i].index << " " << result[i].in_time << " " << result[i].stop_time << " " << result[i].response_begin_time << " " << result[i].response_end_time << std::endl;
         std::cout << result[i].event_name << result[i].index << " " << result[i].in_time << " " << result[i].stop_time << " " << result[i].response_begin_time << " " << result[i].response_end_time << std::endl;
     }
 
