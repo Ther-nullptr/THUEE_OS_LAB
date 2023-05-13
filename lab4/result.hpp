@@ -3,6 +3,7 @@
 
 struct Result
 {
+    int index;
     int in_time;
     int stop_time;
     int response_begin_time;

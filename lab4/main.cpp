@@ -20,15 +20,6 @@ enum class schedule_method
 int main(int argc, char **argv)
 {
     std::string test_file_name = "test.txt";
-    // if (argc > 1)
-    // {
-    //     int method = std::stoi(argv[1]);
-    // }
-    // else
-    // {
-    //     std::cout << "usage: ./main [method] (0: RMS, 1: EDF, 2: LLF)" << std::endl;
-    //     return 0;
-    // }
 
     // open the file to read the data
     char event_name = 'A';
@@ -51,7 +42,7 @@ int main(int argc, char **argv)
                 {
                     break;
                 }
-                Event event{actual_in_time, run_time, actual_in_time + period_or_stop_time, 0, event_name, 1000 / period_or_stop_time};
+                Event event{index : i, in_time : actual_in_time, total_run_time : run_time, stop_time : actual_in_time + period_or_stop_time, event_name : event_name, time_pointer : 0, priority : 1000 / period_or_stop_time};
                 event_queue.push(event);
                 i++;
             }
@@ -59,7 +50,7 @@ int main(int argc, char **argv)
         else
         {
             // aperiodic task
-            Event event{in_time, run_time, period_or_stop_time, 0, event_name};
+            Event event{index : 0, in_time : in_time, total_run_time : run_time, stop_time : period_or_stop_time, event_name : event_name, time_pointer : 0};
             event_queue.push(event);
         }
         event_name++;
@@ -90,6 +81,6 @@ int main(int argc, char **argv)
     std::cout << "event_name in_time stop_time response_begin_time response_end_time" << std::endl;
     for (int i = 0; i < result.size(); ++i)
     {
-        std::cout << result[i].event_name << " " << result[i].in_time << " " << result[i].stop_time << " " << result[i].response_begin_time << " " << result[i].response_end_time << std::endl;
+        std::cout << result[i].event_name << result[i].index << " " << result[i].in_time << " " << result[i].stop_time << " " << result[i].response_begin_time << " " << result[i].response_end_time << std::endl;
     }
 }

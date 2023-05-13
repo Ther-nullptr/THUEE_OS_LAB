@@ -91,7 +91,7 @@ public:
                     Event next_event = event_schedule_queue.top();
                     if (next_event.laxity < current_event.laxity && !(current_event.time_pointer == current_event.total_run_time))
                     {
-                        Result result{current_event.in_time, current_event.stop_time, start_time - 1, i - 1, current_event.event_name, 1};
+                        Result result{index : current_event.index, in_time : current_event.in_time, stop_time : current_event.stop_time, response_begin_time : start_time - 1, response_end_time : i - 1, event_name : current_event.event_name, is_interrupted : 1};
                         current_event.time_pointer = current_event.time_pointer - 1;
                         start_time = i; 
                         next_event.time_pointer = next_event.time_pointer + 1;
@@ -110,7 +110,7 @@ public:
 
                 if (current_event.time_pointer == current_event.total_run_time) // finish running
                 {
-                    Result result{current_event.in_time, current_event.stop_time, start_time - 1, i, current_event.event_name, 0};
+                    Result result{index : current_event.index, in_time : current_event.in_time, stop_time : current_event.stop_time, response_begin_time : start_time - 1, response_end_time : i, event_name : current_event.event_name, is_interrupted : 0};
                     results.push_back(result);
                     is_running = false;
                 }
