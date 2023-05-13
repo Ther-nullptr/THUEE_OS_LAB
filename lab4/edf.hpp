@@ -41,6 +41,7 @@ public:
             {
                 events.pop();
                 event_schedule_queue.push(event);
+                event_arrive = true;
                 if (events.empty())
                 {
                     break;
@@ -49,7 +50,6 @@ public:
             }
 
             // execute the event
-            int start_time;
             if (!is_running)
             {
                 if (!event_schedule_queue.empty())
@@ -65,8 +65,12 @@ public:
             {
                 current_event.time_pointer = current_event.time_pointer + 1;
 
-                // detect preemption
-                preemption(start_time, i);
+                // detect preempt
+                if (event_arrive)
+                {
+                    preempt(i);
+                    event_arrive = false;
+                }
 
                 if (i > current_event.stop_time) // fail to schedule
                 {
@@ -87,25 +91,23 @@ public:
     }
 
 private:
-    void preemption(int start_time, int end_time) override
+    void preempt(int preempt_time) override
     {
-        if (!event_schedule_queue.empty())
+        Event next_event = event_schedule_queue.top();
+        if (next_event.stop_time < current_event.stop_time && !(current_event.time_pointer == current_event.total_run_time))
         {
-            Event next_event = event_schedule_queue.top();
-            if (next_event.stop_time < current_event.stop_time && !(current_event.time_pointer == current_event.total_run_time))
-            {
-                Result result{index : current_event.index, in_time : current_event.in_time, stop_time : current_event.stop_time, response_begin_time : start_time - 1, response_end_time : end_time - 1, event_name : current_event.event_name, is_interrupted : 1};
-                current_event.time_pointer = current_event.time_pointer - 1;
-                start_time = end_time; 
-                next_event.time_pointer = next_event.time_pointer + 1;
-                event_schedule_queue.pop();
-                event_schedule_queue.push(current_event);
-                results.push_back(result);
-                current_event = next_event;
-            }
+            Result result{index : current_event.index, in_time : current_event.in_time, stop_time : current_event.stop_time, response_begin_time : start_time - 1, response_end_time : preempt_time - 1, event_name : current_event.event_name, is_interrupted : 1};
+            current_event.time_pointer = current_event.time_pointer - 1;
+            start_time = preempt_time; 
+            next_event.time_pointer = next_event.time_pointer + 1;
+            event_schedule_queue.pop();
+            event_schedule_queue.push(current_event);
+            results.push_back(result);
+            current_event = next_event;
         }
     }
 
+    int start_time = 0;
     std::priority_queue<Event, std::vector<Event>, edf_cmp> event_schedule_queue;
 };
 
