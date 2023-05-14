@@ -45,6 +45,7 @@ public:
             {
                 events.pop();
                 event_schedule_queue.push(event);
+                event_arrive = true;
                 if (events.empty())
                 {
                     break;
