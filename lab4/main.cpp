@@ -29,7 +29,7 @@ int main(int argc, char **argv)
     }
     else
     {
-        std::cout << "help: ./main [ R(1) | E(2) | L(3) ] " << std::endl;
+        std::cout << "help: ./main [ RMS(1) | EDF(2) | LLF(3) ] " << std::endl;
         return 0;
     }
 

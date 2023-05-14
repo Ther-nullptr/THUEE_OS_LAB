@@ -326,9 +326,9 @@ end_write:
 obj-m += mypipe.o
 KERNELBUILD := /lib/modules/$(shell uname -r)/build
 default:
-	make -C $(KERNELBUILD) M=$(PWD) modules
+	make -C $(KERNELBUILD) M=$(shell pwd) modules
 clean:
-	make -C $(KERNELBUILD) M=$(PWD) clean
+	make -C $(KERNELBUILD) M=$(shell pwd) clean
 ```
 
 使用`sudo make`指令编译驱动，得到`mypipe.ko`文件。
