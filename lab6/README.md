@@ -473,3 +473,7 @@ int main(int argc, char *argv[])
 ![image.png](https://s2.loli.net/2023/05/10/1fKSnWJDuRxXm2E.png)
 
 可以看到，该驱动设备的工作符合预期。
+
+## 6 实验感想
+
+这是我第一次接触内核编程，我学习到了很多linux的系统调用在c语言中的写法，同时我对linux内部的工作机制有了更加深入的理解，衷心感谢助教和老师的辛勤付出！
