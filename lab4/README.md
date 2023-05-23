@@ -229,13 +229,13 @@ struct llf_cmp
 };
 ```
 
-抢占规则为：如果就绪队列队首的松弛度大于当前进程的松弛度，则抢占。抢占时，将当前进程放回就绪队列，然后运行新的进程。
+抢占规则为：如果就绪队列队首的松弛度大于当前进程的松弛度，且这个事件是刚刚到达的事件，则抢占。抢占时，将当前进程放回就绪队列，然后运行新的进程。
 
 ```cpp
 void preempt(int preempt_time) override
 {
     Event next_event = event_schedule_queue.top();
-    if (next_event.laxity < current_event.laxity && !(current_event.time_pointer == current_event.total_run_time))
+    if (next_event.in_time + 1 == preempt_time && next_event.laxity < current_event.laxity && !(current_event.time_pointer == current_event.total_run_time))
     {
         Result result{index : current_event.index, in_time : current_event.in_time, stop_time : current_event.stop_time, response_begin_time : start_time - 1, response_end_time : preempt_time - 1, event_name : current_event.event_name, is_interrupted : 1};
         current_event.time_pointer = current_event.time_pointer - 1;
@@ -328,7 +328,7 @@ EDF：
 
 LLF：
 
-![image.png](https://s2.loli.net/2023/05/14/IobrMPpKS1qBlN4.png)
+![image.png](https://s2.loli.net/2023/05/23/9fl6gPtvupdUm37.png)
 
 与课件中的例子相比较，结果一致（两个非周期事件被插入时间队列的末尾），说明正确：
 

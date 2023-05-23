@@ -110,7 +110,7 @@ private:
     void preempt(int preempt_time) override
     {
         Event next_event = event_schedule_queue.top();
-        if (next_event.laxity < current_event.laxity && !(current_event.time_pointer == current_event.total_run_time))
+        if (next_event.in_time + 1 == preempt_time && next_event.laxity < current_event.laxity && !(current_event.time_pointer == current_event.total_run_time))
         {
             Result result{index : current_event.index, in_time : current_event.in_time, stop_time : current_event.stop_time, response_begin_time : start_time - 1, response_end_time : preempt_time - 1, event_name : current_event.event_name, is_interrupted : 1};
             current_event.time_pointer = current_event.time_pointer - 1;
