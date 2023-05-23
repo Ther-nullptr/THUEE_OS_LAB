@@ -43,6 +43,8 @@ you can see the result in `result.txt`.
 
 ## LAB4 Process Scheduling
 
+Source code is in `lab4/` directory.
+
 ### build
 
 ```bash
@@ -71,6 +73,8 @@ then run the main program:
 you can see the result in `result.txt`.
 
 ## LAB6 Pipe Driver
+
+Source code is in `lab6/` directory.
 
 ### build
 
